@@ -42,7 +42,7 @@ let description = "Unity3D tasks for FAKE"
 let authors = [ "devboy" ]
 
 // Tags for your project (for NuGet package)
-let tags = ""
+let tags = "unity3d, FAKE, f#"
 
 // File system information 
 let solutionFile  = "FAKE.Unity3D.sln"
@@ -156,20 +156,43 @@ Target "SourceLink" (fun _ ->
 // Build a NuGet package
 
 Target "NuGet" (fun _ ->
-    NuGet (fun p ->
-        { p with
-            Authors = authors
-            Project = project
-            Summary = summary
-            Description = description
-            Version = release.NugetVersion
-            ReleaseNotes = String.Join(Environment.NewLine, release.Notes)
-            Tags = tags
-            OutputPath = "bin"
-            AccessKey = getBuildParamOrDefault "nugetkey" ""
-            Publish = hasBuildParam "nugetkey"
-            Dependencies = [] })
-        ("nuget/" + project + ".nuspec")
+    let deps =
+        ["FAKE", GetPackageVersion "./packages" "FAKE"; 
+         "FSharp.Data", GetPackageVersion "./packages" "FSharp.Data";]
+    let nugetParams = { 
+      NuGetHelper.NuGetDefaults() with
+        Authors = authors
+        WorkingDir="."
+        Project = project
+        Summary = summary
+        Description = description
+        Version = release.NugetVersion
+        ReleaseNotes = String.Join(Environment.NewLine, release.Notes)
+        Tags = tags
+        OutputPath = "bin"
+        AccessKey = getBuildParamOrDefault "nugetkey" ""
+        PublishUrl = "https://www.nuget.org"     
+#if MONO
+        Publish = false
+#else
+        Publish = hasBuildParam "nugetkey"
+#endif
+        Dependencies = deps
+        DependenciesByFramework = [{ FrameworkVersion="net40"; Dependencies=deps}] }
+    NuGet (fun p -> nugetParams) ("nuget/" + project + ".nuspec")
+
+#if MONO    
+    if hasBuildParam "nugetkey" then
+      let source = sprintf "-s %s" nugetParams.PublishUrl
+      let args = sprintf "push \"%s\" %s %s" (nugetParams.OutputPath @@ sprintf "%s.%s.nupkg" nugetParams.Project nugetParams.Version) nugetParams.AccessKey source
+      let result = 
+              ExecProcess (fun info -> 
+                  info.FileName <- nugetParams.ToolPath
+                  info.WorkingDirectory <- FullName nugetParams.WorkingDir
+                  info.Arguments <- args) nugetParams.TimeOut
+      //enableProcessTracing <- tracing
+      if result <> 0 then failwithf "Error during NuGet push. %s %s" nugetParams.ToolPath args
+#endif
 )
 
 // --------------------------------------------------------------------------------------
@@ -247,10 +270,12 @@ Target "Release" (fun _ ->
     Branches.tag "" release.NugetVersion
     Branches.pushTag "" "origin" release.NugetVersion
     
+    let nugetPkg = (sprintf "bin/FAKE.Unity3D.%s.nupkg" release.NugetVersion)
+
     // release on github
     createClient (getBuildParamOrDefault "github-user" "") (getBuildParamOrDefault "github-pw" "")
     |> createDraft gitOwner gitName release.NugetVersion (release.SemVer.PreRelease <> None) release.Notes 
-    // TODO: |> uploadFile "PATH_TO_FILE"    
+    |> uploadFile nugetPkg    
     |> releaseDraft
     |> Async.RunSynchronously
 )
