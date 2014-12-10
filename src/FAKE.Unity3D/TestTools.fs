@@ -138,6 +138,7 @@ module Unity3DTestTools =
         async { 
             let parameters = 
                 customParams {defaultParams with executeMethod=Some "UnityTest.Batch.RunUnitTests";
+                                                 stopOnFailure=false;
                                                  args= Seq.append defaultParams.args [(sprintf "-resultFilePath=%s" <| resultsFile defaultParams)]}
             do DeleteFile <| resultsFile defaultParams
             let! exec = ExecAsync parameters
@@ -147,7 +148,9 @@ module Unity3DTestTools =
                 | _ -> Results.emptyReport
             printResults results
             match exec, results, ignoreFailures with
-            | Success _, report, false when not report.successful -> failwith "Tests failed"
+            | _, _, true -> ()
+            | _, report, false when not report.successful -> failwith "Tests failed"
+            | Failure _, _, false -> failwith "Tests failed"
             | _, _, _ -> ()   
             return exec, results 
         }
