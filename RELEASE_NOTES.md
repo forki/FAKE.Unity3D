@@ -1,3 +1,6 @@
+#### 0.0.3 - December 10 2014
+* Better handling of TestTools exit codes
+
 #### 0.0.2 - December 10 2014
 * Adds FSharp.Data and FAKE dependencies in NuGet package
 
